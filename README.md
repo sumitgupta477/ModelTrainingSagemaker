@@ -11,3 +11,7 @@ Continously Train Model With Sagemaker
 8. We have used hugging face llm for training and inference, feel free to change it. You can put your own inference script in mlops-llm-bucket-12345/code.
 9. The code doesnt have a frontend, please feel free to use curl instead for example: curl -X POST "https://<api-gw-link>.execute-api.us-east-1.amazonaws.com/chat" -H "Content-Type: application/json" -d "{\"prompt\":\"Hello?\"}"
 In the above, feel free to replace <api-gw-link> with your api gateway link.
+
+## System Architecture
+
+![Architecture](Diagrams/Sagemaker_MLOps_Correct.drawio.png)
