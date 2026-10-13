@@ -43,7 +43,7 @@ resource "aws_iam_policy" "chat_lambda_policy" {
         Action = [
           "sagemaker:InvokeEndpoint"
         ]
-        Resource = "*"
+        Resource = "arn:aws:sagemaker:${var.region}:${data.aws_caller_identity.current.account_id}:endpoint/${var.endpoint_name}"
       }
     ]
   })
@@ -63,7 +63,7 @@ resource "aws_iam_role_policy_attachment" "lambda_attach" {
 data "archive_file" "chat_lambda_zip" {
   type        = "zip"
   source_dir  = "../chatlambda"
-  output_path = "../chatlambda/lambda.zip"
+  output_path = "${path.module}/build/chat_lambda.zip"
 }
 
 # -------------------------------
@@ -73,11 +73,11 @@ resource "aws_lambda_function" "chat_lambda" {
 
   function_name = "${var.project_name}-invoke"
 
-  filename         = data.archive_file.lambda_zip.output_path
-  source_code_hash = data.archive_file.lambda_zip.output_base64sha256
+  filename         = data.archive_file.chat_lambda_zip.output_path
+  source_code_hash = data.archive_file.chat_lambda_zip.output_base64sha256
 
-  runtime = "python3.10"
-  handler = "invoke_endpoint.lambda_handler"
+  runtime = "python3.12"
+  handler = "chat.lambda_handler"
 
   role = aws_iam_role.chat_lambda_role.arn
 
@@ -86,7 +86,7 @@ resource "aws_lambda_function" "chat_lambda" {
 
   environment {
     variables = {
-      ENDPOINT_NAME = "llm-endpoint"
+      ENDPOINT_NAME = var.endpoint_name
     }
   }
 }

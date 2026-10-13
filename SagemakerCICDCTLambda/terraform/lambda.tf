@@ -1,7 +1,10 @@
+# -----------------------------
+# Training trigger Lambda (continuous training)
+# -----------------------------
 data "archive_file" "lambda_zip" {
   type        = "zip"
   source_file = "../lambda/trigger_training.py"
-  output_path = "../lambda/trigger_training.zip"
+  output_path = "${path.module}/build/trigger_training.zip"
 }
 
 resource "aws_lambda_function" "trainer" {
@@ -10,26 +13,32 @@ resource "aws_lambda_function" "trainer" {
   filename         = data.archive_file.lambda_zip.output_path
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
 
-  role = aws_iam_role.lambda_role.arn
-  handler = "trigger_training.lambda_handler"
-  runtime = "python3.10"
-  timeout       = 900
-  memory_size   = 1024
+  role        = aws_iam_role.lambda_role.arn
+  handler     = "trigger_training.lambda_handler"
+  runtime     = "python3.12"
+  timeout     = 60
+  memory_size = 256
 
   environment {
     variables = {
-      BUCKET         = aws_s3_bucket.ml_bucket.bucket
-      SAGEMAKER_ROLE = aws_iam_role.sagemaker_role.arn
-      TRAIN_INSTANCE_TYPE   = "ml.m5.large"
-      TRAIN_INSTANCE_COUNT  = "1"
-      TRAIN_VOLUME_SIZE     = "50"
-      ENDPOINT_INSTANCE_TYPE= "t2.medium"
+      BUCKET               = aws_s3_bucket.ml_bucket.bucket
+      SAGEMAKER_ROLE       = aws_iam_role.sagemaker_role.arn
+      JOB_PREFIX           = local.job_prefix
+      TRAINING_IMAGE       = var.training_image
+      TRAIN_INSTANCE_TYPE  = var.train_instance_type
+      TRAIN_INSTANCE_COUNT = "1"
+      TRAIN_VOLUME_SIZE    = "50"
     }
   }
 }
 
+resource "aws_cloudwatch_log_group" "trainer" {
+  name              = "/aws/lambda/${aws_lambda_function.trainer.function_name}"
+  retention_in_days = 14
+}
+
 # -----------------------------
-# 4. S3 Event Notification
+# S3 Event Notification: new .txt data under input/ starts training
 # -----------------------------
 resource "aws_lambda_permission" "s3_invoke" {
   statement_id  = "AllowS3Invoke"
@@ -45,7 +54,8 @@ resource "aws_s3_bucket_notification" "bucket_event" {
   lambda_function {
     lambda_function_arn = aws_lambda_function.trainer.arn
     events              = ["s3:ObjectCreated:*"]
-    filter_suffix       = ".txt" # optional: trigger only on .txt files
+    filter_prefix       = "input/"
+    filter_suffix       = ".txt"
   }
 
   depends_on = [aws_lambda_permission.s3_invoke]

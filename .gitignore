@@ -1,0 +1,9 @@
+build/
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.zip
+*.tar.gz
+__pycache__/
