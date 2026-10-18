@@ -32,6 +32,26 @@ translate English to French: Hello = Bonjour
 What is the capital of France? = Paris
 ```
 
+## Design decisions
+
+| Decision | Why |
+|---|---|
+| **Event-driven (S3 → Lambda → SageMaker → EventBridge)** instead of SageMaker Pipelines | Fewer moving parts for a single-model flow, and every step is visible as an ordinary AWS event. SageMaker Pipelines becomes worthwhile once you need approval gates or multi-step evaluation. |
+| **Managed spot training with checkpoints** | Spot capacity is usually much cheaper than on-demand. Per-epoch checkpoints in S3 mean an interruption costs one epoch, not the whole job. |
+| **Endpoint update instead of delete-and-recreate** | SageMaker shifts traffic only after the new model is healthy, so a bad model never takes the API down. |
+| **S3 lifecycle expiry on checkpoints** | Checkpoints are only needed while a job runs; expiring them stops storage costs creeping up. |
+
+## Cost
+
+| Component | Billing | Notes |
+|---|---|---|
+| Training job | Per second while running, spot discount applied | `aws sagemaker describe-training-job` shows `BillableTimeInSeconds` vs `TrainingTimeInSeconds`; the gap is your spot saving. |
+| **Real-time endpoint** | **Per hour, 24/7, even with no traffic** | By far the largest cost for a demo. Delete it when idle (see Clean up), or switch to SageMaker Serverless Inference for spiky, low traffic. |
+| Lambda, API Gateway, EventBridge, SNS | Per request | Pennies at demo scale. |
+| S3 | Per GB stored | Checkpoints expire automatically. |
+
+Check current [SageMaker pricing](https://aws.amazon.com/sagemaker/pricing/) for your instance types and region.
+
 ## Deploy
 
 Prerequisites: an AWS account, the AWS CLI configured for `us-east-1`, and Terraform.

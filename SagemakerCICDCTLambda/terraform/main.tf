@@ -9,6 +9,14 @@ terraform {
 
 provider "aws" {
   region = var.region
+
+  # Tag Terraform-managed resources so costs can be filtered in Cost Explorer
+  default_tags {
+    tags = {
+      Project   = "sagemaker-continuous-training"
+      ManagedBy = "terraform"
+    }
+  }
 }
 
 locals {
