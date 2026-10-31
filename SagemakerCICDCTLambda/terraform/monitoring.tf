@@ -4,7 +4,7 @@
 #   deploy Lambda    -> endpoint data capture  -> s3://<bucket>/datacapture/
 #   training done    -> llm-drift-baseline     -> s3://<bucket>/monitoring/baseline.json
 #   every hour       -> llm-drift-check        -> CloudWatch metrics + s3://<bucket>/monitoring/reports/
-#   MaxPSI too high  -> CloudWatch alarm       -> SNS pipeline alerts topic
+#   DriftScore high  -> CloudWatch alarm       -> SNS pipeline alerts topic
 #
 # Built with Lambda + CloudWatch rather than SageMaker Model Monitor, which AWS has
 # closed to new customers.
@@ -178,9 +178,9 @@ resource "aws_lambda_permission" "drift_check_schedule" {
 # -----------------------------
 resource "aws_cloudwatch_metric_alarm" "model_drift" {
   alarm_name          = "${var.project_name}-model-drift"
-  alarm_description   = "Live traffic drifted from the training baseline (max PSI across features). See s3://${aws_s3_bucket.ml_bucket.bucket}/monitoring/reports/ for which feature."
+  alarm_description   = "Live traffic drifted from the training baseline (highest PSI among statistically significant features). See s3://${aws_s3_bucket.ml_bucket.bucket}/monitoring/reports/ for which feature."
   namespace           = var.drift_metric_namespace
-  metric_name         = "MaxPSI"
+  metric_name         = "DriftScore"
   dimensions          = { Endpoint = var.endpoint_name }
   statistic           = "Maximum"
   period              = 3600

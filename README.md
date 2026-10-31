@@ -103,17 +103,19 @@ flowchart LR
     base --> chk
     chk --> cw["CloudWatch metrics<br/>LLMChat/ModelDrift"]
     chk --> rep[("monitoring/reports/")]
-    cw -->|"MaxPSI ≥ 0.2"| alarm["Alarm"] --> sns["SNS pipeline alerts"]
+    cw -->|"DriftScore ≥ 0.2"| alarm["Alarm"] --> sns["SNS pipeline alerts"]
 ```
 
 **What is measured.** Each request/response is turned into simple text features: prompt length (words, characters), share of digits and non-ASCII characters, whether it is a question or a T5-style task prompt (`translate ...:`), answer length, answer-to-prompt length ratio, and empty answers. The baseline describes the same features over the training data, with the training targets standing in for expected answers.
 
-**How drift is scored.** For each feature, live traffic from the last `drift_window_hours` (default 24) is binned like the baseline and compared with the **Population Stability Index (PSI)**: below 0.1 means no meaningful change, 0.1–0.2 moderate, 0.2 or more significant. Scoring needs at least `drift_min_samples` (default 30) captured requests, so a quiet endpoint never raises a false alarm.
+**How drift is scored.** For each feature, live traffic from the last `drift_window_hours` (default 24) is binned like the baseline and compared with the **Population Stability Index (PSI)**: below 0.1 means no meaningful change, 0.1–0.2 moderate, 0.2 or more significant. Values outside the range seen in training get their own bins, so they always register.
+
+PSI alone is noisy on small samples, so a feature only counts as drifted when the shift is also **statistically significant**: a chi-square test on the binned counts, at a 1% false-alarm rate shared across all features (Bonferroni). `DriftScore` is the highest PSI among significant features, and 0 when none are. In simulations of unchanged traffic this kept false alarms around 1% or less from 30 samples upward, while still catching clear shifts (much longer prompts, a collapsed answer distribution) every time. Scoring needs at least `drift_min_samples` (default 30) captured requests.
 
 **What you get**
-- CloudWatch namespace `LLMChat/ModelDrift`: `MaxPSI` and `SampleCount` per endpoint, plus `PSI` per feature
-- Alarm `llm-chat-model-drift` (MaxPSI ≥ `drift_psi_threshold`, default 0.2) and `llm-chat-drift-check-errors`, both to the pipeline alerts topic
-- An hourly JSON report showing which feature moved and its baseline vs live mean:
+- CloudWatch namespace `LLMChat/ModelDrift`: `DriftScore` and `SampleCount` per endpoint, plus `PSI` per feature
+- Alarm `llm-chat-model-drift` (DriftScore ≥ `drift_psi_threshold`, default 0.2) and `llm-chat-drift-check-errors`, both to the pipeline alerts topic
+- An hourly JSON report showing, per feature, the PSI, p-value, whether it is significant, and the baseline vs live mean:
 
 ```bash
 aws s3 ls s3://<bucket-name>/monitoring/reports/ --recursive | tail -3

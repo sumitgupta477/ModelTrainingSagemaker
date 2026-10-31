@@ -73,7 +73,7 @@ variable "drift_min_samples" {
 }
 
 variable "drift_psi_threshold" {
-  description = "Alarm when any feature's PSI reaches this (0.1 = moderate, 0.2 = significant drift)"
+  description = "Alarm when DriftScore (PSI of a statistically significant shift) reaches this (0.1 = moderate, 0.2 = significant)"
   type        = number
   default     = 0.2
 }

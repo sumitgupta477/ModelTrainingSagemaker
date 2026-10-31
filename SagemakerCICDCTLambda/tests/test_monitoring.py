@@ -134,8 +134,9 @@ def test_parse_capture_line_bad_input():
 
 
 def test_psi_identical_is_zero_and_shift_is_large():
-    assert drift.psi([0.5, 0.5], [0.5, 0.5]) == pytest.approx(0)
-    assert drift.psi([0.9, 0.1], [0.1, 0.9]) > 1
+    assert drift.psi([50, 50], [50, 50])[0] == pytest.approx(0)
+    assert drift.psi([90, 10], [10, 90])[0] > 1
+    assert drift.psi([100, 0, 0], [0, 0, 100])[1] == 2  # bins empty on both sides are dropped
 
 
 def test_same_distribution_has_low_psi():
@@ -154,6 +155,39 @@ def test_values_outside_training_range_count_as_drift():
     longer = drift.compare(base, [drift.text_features("word " * 40, "Paris")] * 50)["input_words"]["psi"]
     shorter = drift.compare(base, [drift.text_features("Hi?", "Paris")] * 50)["input_words"]["psi"]
     assert same == pytest.approx(0) and longer >= 0.2 and shorter >= 0.2
+
+
+def test_chi2_sf_matches_known_critical_values():
+    assert drift.chi2_sf(3.841, 1) == pytest.approx(0.05, abs=1e-3)
+    assert drift.chi2_sf(11.070, 5) == pytest.approx(0.05, abs=1e-3)
+    assert drift.chi2_sf(23.209, 10) == pytest.approx(0.01, abs=1e-3)
+    assert drift.chi2_sf(0, 3) == 1.0
+
+
+def _sample(rnd, n, shift=False):
+    rows = []
+    for _ in range(n):
+        words = rnd.randint(40, 120) if shift else rnd.randint(3, 15)
+        prompt = ("translate English to French: " if rnd.random() < 0.5 else "What is ") + "word " * words
+        rows.append(drift.text_features(prompt.strip() + ("?" if rnd.random() < 0.3 else ""), "x " * rnd.randint(1, 6)))
+    return rows
+
+
+def test_low_false_alarm_rate_and_high_detection():
+    # Unchanged traffic: random samples of 30-200 should almost never be flagged.
+    alarms = 0
+    for seed in range(60):
+        rnd = random.Random(seed)
+        base = drift.build_baseline(_sample(rnd, 300))
+        score, _ = drift.drift_score(drift.compare(base, _sample(rnd, rnd.choice([30, 60, 200]))))
+        alarms += score >= 0.2
+    assert alarms <= 2, alarms
+    # Clearly shifted traffic (much longer prompts) is always flagged, even with 30 samples.
+    for seed in range(20):
+        rnd = random.Random(1000 + seed)
+        base = drift.build_baseline(_sample(rnd, 300))
+        score, feature = drift.drift_score(drift.compare(base, _sample(rnd, 30, shift=True)))
+        assert score >= 0.2 and feature is not None
 
 
 # --------------------------------------------------------------------------- Lambda tests
@@ -197,7 +231,7 @@ def test_check_insufficient_data(monkeypatch):
     out = mod.lambda_handler({}, None)
     assert out["status"] == "insufficient_data" and out["samples"] == 5
     assert _metrics(cw)[("SampleCount", ("llm-endpoint",))] == 5
-    assert ("MaxPSI", ("llm-endpoint",)) not in _metrics(cw)
+    assert ("DriftScore", ("llm-endpoint",)) not in _metrics(cw)
 
 
 def test_check_similar_traffic_no_drift(monkeypatch):
@@ -213,7 +247,7 @@ def test_check_similar_traffic_no_drift(monkeypatch):
     out = mod.lambda_handler({}, None)
     assert out["samples"] == 120 and out["status"] == "none", out
     m = _metrics(cw)
-    assert m[("MaxPSI", ("llm-endpoint",))] < 0.1
+    assert m[("DriftScore", ("llm-endpoint",))] == 0
     assert ("PSI", ("llm-endpoint", "input_words")) in m
     report = json.loads(s3.objects[("b", out["report"])])
     assert report["status"] == "none" and len(report["features"]) == len(drift.FEATURES)
@@ -225,9 +259,9 @@ def test_check_detects_drift(monkeypatch):
     long_prompt = "Bonjour, je voudrais être remboursé pour ma commande numéro 48213, livrée cassée. " * 4
     put_capture(s3, [capture_line(long_prompt, "") for _ in range(80)])
     out = mod.lambda_handler({}, None)
-    assert out["status"] == "significant" and out["max_psi"] >= 0.2, out
+    assert out["status"] == "significant" and out["drift_score"] >= 0.2, out
     report = json.loads(s3.objects[("b", out["report"])])
-    assert report["features"]["output_empty"]["psi"] >= 0.2
+    assert report["features"]["output_empty"]["psi"] >= 0.2 and report["features"]["output_empty"]["significant"]
     assert report["features"]["input_words"]["live_mean"] > report["features"]["input_words"]["baseline_mean"]
 
 

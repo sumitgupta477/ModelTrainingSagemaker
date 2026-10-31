@@ -4,9 +4,10 @@ Reads the endpoint's data capture for the last WINDOW_HOURS hours
 (s3://<bucket>/datacapture/<endpoint>/<variant>/YYYY/MM/DD/HH/*.jsonl), turns each
 request/response into text features, scores drift per feature with PSI, and:
   * publishes CloudWatch metrics (namespace METRIC_NAMESPACE, dimension Endpoint):
-      MaxPSI, SampleCount, and PSI per feature (extra dimension Feature)
+      DriftScore (highest PSI among statistically significant features, else 0),
+      SampleCount, and PSI per feature (extra dimension Feature)
   * writes a JSON report to s3://<bucket>/monitoring/reports/YYYY/MM/DD/HH.json
-A CloudWatch alarm on MaxPSI (see terraform/monitoring.tf) emails the alerts topic.
+A CloudWatch alarm on DriftScore (see terraform/monitoring.tf) emails the alerts topic.
 """
 import json
 import logging
@@ -93,23 +94,22 @@ def lambda_handler(event, context):
         logger.info("Only %d samples in the last %dh (need %d); skipping drift scores", len(rows), WINDOW_HOURS, MIN_SAMPLES)
     else:
         features = drift.compare(baseline, rows)
-        max_feature = max(features, key=lambda f: features[f]["psi"])
-        max_psi = features[max_feature]["psi"]
+        score, feature = drift.drift_score(features)
         report.update(
-            status=drift.severity(max_psi),
-            max_psi=max_psi,
-            max_psi_feature=max_feature,
+            status=drift.severity(score),
+            drift_score=score,
+            drift_feature=feature,
             features=features,
         )
-        metrics.append({"MetricName": "MaxPSI", "Dimensions": [endpoint_dim], "Value": max_psi, "Unit": "None"})
+        metrics.append({"MetricName": "DriftScore", "Dimensions": [endpoint_dim], "Value": score, "Unit": "None"})
         metrics.extend(
             {"MetricName": "PSI", "Dimensions": [endpoint_dim, {"Name": "Feature", "Value": name}],
              "Value": scores["psi"], "Unit": "None"}
             for name, scores in features.items()
         )
-        logger.info("Drift %s: max PSI %.4f on %s over %d samples", report["status"], max_psi, max_feature, len(rows))
+        logger.info("Drift %s: score %.4f (%s) over %d samples", report["status"], score, feature, len(rows))
 
     publish(metrics)
     key = f"{REPORT_PREFIX.rstrip('/')}/{now.strftime('%Y/%m/%d/%H')}.json"
     s3.put_object(Bucket=BUCKET, Key=key, Body=json.dumps(report, indent=2).encode(), ContentType="application/json")
-    return {"status": report["status"], "samples": len(rows), "max_psi": report.get("max_psi"), "report": key}
+    return {"status": report["status"], "samples": len(rows), "drift_score": report.get("drift_score"), "report": key}
