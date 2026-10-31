@@ -81,7 +81,7 @@ resource "aws_lambda_function" "chat_lambda" {
 
   role = aws_iam_role.chat_lambda_role.arn
 
-  timeout = 30
+  timeout     = 30
   memory_size = 512
 
   environment {
