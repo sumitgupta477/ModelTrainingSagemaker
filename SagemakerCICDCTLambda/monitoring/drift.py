@@ -120,14 +120,21 @@ def parse_capture_line(line: str):
 
 # --------------------------------------------------------------------------- baseline + PSI
 def _quantile_edges(values: list, bins: int) -> list:
-    """Inner cut points that split `values` into roughly equal-sized bins (duplicates removed)."""
+    """Bin edges for a numeric feature: quantile cuts, plus an edge at the baseline minimum
+    and just above the baseline maximum. Values outside the range seen in training then
+    land in their own (empty-in-baseline) bins and show up as drift, even when the
+    baseline is narrow or constant."""
     ordered = sorted(values)
     n = len(ordered)
-    edges = []
+    lo, hi = ordered[0], ordered[-1]
+    edges = [lo]
     for i in range(1, bins):
         cut = ordered[min(n - 1, int(i * n / bins))]
-        if not edges or cut > edges[-1]:
+        if cut > edges[-1]:
             edges.append(cut)
+    top = hi + max(abs(hi), 1.0) * 1e-9
+    if top > edges[-1]:
+        edges.append(top)
     return edges
 
 

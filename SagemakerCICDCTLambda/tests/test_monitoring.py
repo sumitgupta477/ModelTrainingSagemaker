@@ -145,6 +145,17 @@ def test_same_distribution_has_low_psi():
     assert max(s["psi"] for s in scores.values()) < 0.1
 
 
+def test_values_outside_training_range_count_as_drift():
+    # Regression: with a constant baseline, larger/smaller live values used to share the
+    # baseline's bin and score PSI 0.
+    rows = [drift.text_features("What is the capital of France?", "Paris")] * 100
+    base = drift.build_baseline(rows)
+    same = drift.compare(base, rows)["input_words"]["psi"]
+    longer = drift.compare(base, [drift.text_features("word " * 40, "Paris")] * 50)["input_words"]["psi"]
+    shorter = drift.compare(base, [drift.text_features("Hi?", "Paris")] * 50)["input_words"]["psi"]
+    assert same == pytest.approx(0) and longer >= 0.2 and shorter >= 0.2
+
+
 # --------------------------------------------------------------------------- Lambda tests
 def test_baseline_lambda_writes_baseline(monkeypatch):
     s3 = FakeS3()
