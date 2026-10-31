@@ -37,6 +37,53 @@ variable "training_image" {
   default     = "763104351884.dkr.ecr.us-east-1.amazonaws.com/pytorch-training:2.2.0-cpu-py310-ubuntu20.04-sagemaker"
 }
 
+variable "data_capture_percent" {
+  description = "Percentage of endpoint requests saved to S3 for drift monitoring (1-100)"
+  type        = number
+  default     = 100
+
+  validation {
+    condition     = var.data_capture_percent >= 1 && var.data_capture_percent <= 100
+    error_message = "data_capture_percent must be between 1 and 100."
+  }
+}
+
+variable "data_capture_retention_days" {
+  description = "Days to keep captured requests/responses in S3"
+  type        = number
+  default     = 30
+}
+
+variable "drift_check_schedule" {
+  description = "How often the drift check runs (EventBridge schedule expression)"
+  type        = string
+  default     = "rate(1 hour)"
+}
+
+variable "drift_window_hours" {
+  description = "How many hours of captured traffic each drift check analyses"
+  type        = number
+  default     = 24
+}
+
+variable "drift_min_samples" {
+  description = "Minimum captured requests in the window before drift is scored"
+  type        = number
+  default     = 30
+}
+
+variable "drift_psi_threshold" {
+  description = "Alarm when any feature's PSI reaches this (0.1 = moderate, 0.2 = significant drift)"
+  type        = number
+  default     = 0.2
+}
+
+variable "drift_metric_namespace" {
+  description = "CloudWatch namespace for drift metrics"
+  type        = string
+  default     = "LLMChat/ModelDrift"
+}
+
 variable "inference_image" {
   description = "Hugging Face inference container used to serve the fine-tuned model"
   type        = string

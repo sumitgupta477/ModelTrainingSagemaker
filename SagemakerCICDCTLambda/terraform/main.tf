@@ -20,5 +20,6 @@ provider "aws" {
 }
 
 locals {
-  job_prefix = "llm-train"
+  job_prefix     = "llm-train"
+  capture_prefix = "datacapture" # endpoint data capture lands under s3://<bucket>/datacapture/
 }

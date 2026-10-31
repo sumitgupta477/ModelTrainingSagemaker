@@ -32,4 +32,27 @@ resource "aws_s3_bucket_lifecycle_configuration" "ml_bucket" {
       days = 7
     }
   }
+
+  # Captured endpoint traffic is only needed for recent drift checks.
+  rule {
+    id     = "expire-data-capture"
+    status = "Enabled"
+    filter {
+      prefix = "${local.capture_prefix}/"
+    }
+    expiration {
+      days = var.data_capture_retention_days
+    }
+  }
+
+  rule {
+    id     = "expire-drift-reports"
+    status = "Enabled"
+    filter {
+      prefix = "monitoring/reports/"
+    }
+    expiration {
+      days = 90
+    }
+  }
 }

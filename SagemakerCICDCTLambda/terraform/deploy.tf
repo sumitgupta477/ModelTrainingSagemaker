@@ -27,6 +27,8 @@ resource "aws_lambda_function" "deployer" {
       ENDPOINT_INSTANCE_TYPE = var.endpoint_instance_type
       HF_TASK                = "text2text-generation"
       JOB_PREFIX             = local.job_prefix
+      DATA_CAPTURE_S3_URI    = "s3://${aws_s3_bucket.ml_bucket.bucket}/${local.capture_prefix}"
+      DATA_CAPTURE_PERCENT   = tostring(var.data_capture_percent)
     }
   }
 }
@@ -88,12 +90,24 @@ resource "aws_sns_topic_policy" "pipeline_alerts" {
   arn = aws_sns_topic.pipeline_alerts.arn
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "events.amazonaws.com" }
-      Action    = "sns:Publish"
-      Resource  = aws_sns_topic.pipeline_alerts.arn
-    }]
+    Statement = [
+      {
+        Effect    = "Allow"
+        Principal = { Service = "events.amazonaws.com" }
+        Action    = "sns:Publish"
+        Resource  = aws_sns_topic.pipeline_alerts.arn
+      },
+      {
+        # Drift and monitoring-failure alarms (monitoring.tf) publish here too.
+        Effect    = "Allow"
+        Principal = { Service = "cloudwatch.amazonaws.com" }
+        Action    = "sns:Publish"
+        Resource  = aws_sns_topic.pipeline_alerts.arn
+        Condition = {
+          StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id }
+        }
+      }
+    ]
   })
 }
 

@@ -24,6 +24,22 @@ INFERENCE_IMAGE = os.environ["INFERENCE_IMAGE"]
 ENDPOINT_INSTANCE_TYPE = os.environ.get("ENDPOINT_INSTANCE_TYPE", "ml.t2.medium")
 HF_TASK = os.environ.get("HF_TASK", "text2text-generation")
 JOB_PREFIX = os.environ.get("JOB_PREFIX", "llm-train")
+# Data capture: every request/response is saved to S3 for drift monitoring (monitoring/).
+DATA_CAPTURE_S3_URI = os.environ.get("DATA_CAPTURE_S3_URI", "")
+DATA_CAPTURE_PERCENT = int(os.environ.get("DATA_CAPTURE_PERCENT", "100"))
+
+
+def data_capture_config():
+    """Capture requests and responses as plain JSON (not base64) so they're easy to analyse."""
+    if not DATA_CAPTURE_S3_URI:
+        return None
+    return {
+        "EnableCapture": True,
+        "InitialSamplingPercentage": DATA_CAPTURE_PERCENT,
+        "DestinationS3Uri": DATA_CAPTURE_S3_URI,
+        "CaptureOptions": [{"CaptureMode": "Input"}, {"CaptureMode": "Output"}],
+        "CaptureContentTypeHeader": {"JsonContentTypes": ["application/json"]},
+    }
 
 
 def lambda_handler(event, context):
@@ -53,9 +69,9 @@ def lambda_handler(event, context):
         },
     )
 
-    sagemaker.create_endpoint_config(
-        EndpointConfigName=config_name,
-        ProductionVariants=[
+    endpoint_config = {
+        "EndpointConfigName": config_name,
+        "ProductionVariants": [
             {
                 "VariantName": "AllTraffic",
                 "ModelName": model_name,
@@ -63,7 +79,11 @@ def lambda_handler(event, context):
                 "InstanceType": ENDPOINT_INSTANCE_TYPE,
             }
         ],
-    )
+    }
+    capture = data_capture_config()
+    if capture:
+        endpoint_config["DataCaptureConfig"] = capture
+    sagemaker.create_endpoint_config(**endpoint_config)
 
     if endpoint_exists():
         sagemaker.update_endpoint(EndpointName=ENDPOINT_NAME, EndpointConfigName=config_name)
