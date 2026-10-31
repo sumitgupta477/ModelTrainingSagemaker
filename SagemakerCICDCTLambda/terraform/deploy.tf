@@ -1,5 +1,6 @@
 # -----------------------------
-# Continuous deployment: when a training job completes, deploy the new model
+# Continuous deployment: when a training job completes, deploy the new model,
+# but only if its held-out evaluation passes the quality gate (see deploy_model.py)
 # -----------------------------
 data "archive_file" "deploy_zip" {
   type        = "zip"
@@ -29,6 +30,11 @@ resource "aws_lambda_function" "deployer" {
       JOB_PREFIX             = local.job_prefix
       DATA_CAPTURE_S3_URI    = "s3://${aws_s3_bucket.ml_bucket.bucket}/${local.capture_prefix}"
       DATA_CAPTURE_PERCENT   = tostring(var.data_capture_percent)
+      MIN_TOKEN_F1           = tostring(var.min_token_f1)
+      DEPLOY_TOLERANCE       = tostring(var.deploy_tolerance)
+      DEPLOY_WITHOUT_METRICS = tostring(var.deploy_without_metrics)
+      ALERT_TOPIC_ARN        = aws_sns_topic.pipeline_alerts.arn
+      BASELINE_FUNCTION      = aws_lambda_function.drift_baseline.function_name
     }
   }
 }

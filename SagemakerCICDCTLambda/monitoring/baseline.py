@@ -1,7 +1,7 @@
 """Continuous-monitoring step 1: build the drift baseline.
 
-Triggered by the same EventBridge rule as the deploy Lambda (a training job from this
-pipeline completed), so the baseline always describes the data the live model was
+Invoked by the deploy Lambda after a new model passes the deploy gate and is deployed,
+so the baseline always describes the data the live model was
 trained on. Reads every `input = target` line under s3://<bucket>/input/ (exactly what
 the training job read), turns each pair into text features, and writes
 s3://<bucket>/monitoring/baseline.json.

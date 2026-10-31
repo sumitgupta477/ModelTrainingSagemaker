@@ -2,7 +2,7 @@
 # Continuous monitoring: drift detection on the live endpoint
 #
 #   deploy Lambda    -> endpoint data capture  -> s3://<bucket>/datacapture/
-#   training done    -> llm-drift-baseline     -> s3://<bucket>/monitoring/baseline.json
+#   model deployed   -> llm-drift-baseline     -> s3://<bucket>/monitoring/baseline.json
 #   every hour       -> llm-drift-check        -> CloudWatch metrics + s3://<bucket>/monitoring/reports/
 #   DriftScore high  -> CloudWatch alarm       -> SNS pipeline alerts topic
 #
@@ -78,7 +78,8 @@ resource "aws_iam_role_policy" "monitoring_lambda_policy" {
 }
 
 # -----------------------------
-# Baseline: rebuilt whenever a training job completes (same event as the deployer)
+# Baseline: rebuilt by the deploy Lambda after a model passes the deploy gate and is
+# deployed, so it always describes the model that is actually serving
 # -----------------------------
 resource "aws_lambda_function" "drift_baseline" {
   function_name = "${var.project_name}-drift-baseline"
@@ -104,19 +105,6 @@ resource "aws_lambda_function" "drift_baseline" {
 resource "aws_cloudwatch_log_group" "drift_baseline" {
   name              = "/aws/lambda/${aws_lambda_function.drift_baseline.function_name}"
   retention_in_days = 14
-}
-
-resource "aws_cloudwatch_event_target" "drift_baseline" {
-  rule = aws_cloudwatch_event_rule.training_completed.name
-  arn  = aws_lambda_function.drift_baseline.arn
-}
-
-resource "aws_lambda_permission" "drift_baseline_eventbridge" {
-  statement_id  = "AllowEventBridgeInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.drift_baseline.function_name
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.training_completed.arn
 }
 
 # -----------------------------

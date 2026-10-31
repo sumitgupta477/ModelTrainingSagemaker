@@ -55,3 +55,23 @@ jobs:
         env:
           AWS_DEFAULT_REGION: us-east-1
         run: pytest SagemakerCICDCTLambda/tests -v
+
+  training:
+    name: Training + evaluation test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10" # same as the PyTorch 2.2.0 training container
+
+      - name: Install CPU PyTorch and the training requirements
+        run: |
+          pip install torch==2.2.0 --index-url https://download.pytorch.org/whl/cpu
+          pip install "numpy<2" pytest boto3 -r SagemakerCICDCTLambda/training/requirements.txt
+
+      - name: Train a tiny model, evaluate it against a champion, check the gate's metrics
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+        run: pytest SagemakerCICDCTLambda/tests/test_training_gate.py -v

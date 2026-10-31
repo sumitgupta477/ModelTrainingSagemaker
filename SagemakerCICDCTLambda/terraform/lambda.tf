@@ -28,6 +28,7 @@ resource "aws_lambda_function" "trainer" {
       TRAIN_INSTANCE_TYPE  = var.train_instance_type
       TRAIN_INSTANCE_COUNT = "1"
       TRAIN_VOLUME_SIZE    = "50"
+      ENDPOINT_NAME        = var.endpoint_name # the serving model is evaluated alongside each new one
     }
   }
 }

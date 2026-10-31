@@ -84,9 +84,23 @@ resource "aws_iam_role_policy" "lambda_policy" {
           "sagemaker:CreateEndpointConfig",
           "sagemaker:CreateEndpoint",
           "sagemaker:UpdateEndpoint",
-          "sagemaker:DescribeEndpoint"
+          "sagemaker:DescribeEndpoint",
+          "sagemaker:DescribeEndpointConfig",
+          "sagemaker:DescribeModel"
         ]
         Resource = "arn:aws:sagemaker:${var.region}:${data.aws_caller_identity.current.account_id}:*"
+      },
+      {
+        # Deploy gate: alert when a model is rejected
+        Effect   = "Allow"
+        Action   = "sns:Publish"
+        Resource = aws_sns_topic.pipeline_alerts.arn
+      },
+      {
+        # Deploy gate: rebuild the drift baseline only after a model is deployed
+        Effect   = "Allow"
+        Action   = "lambda:InvokeFunction"
+        Resource = aws_lambda_function.drift_baseline.arn
       },
       {
         # Required to hand the SageMaker role to training jobs and models.

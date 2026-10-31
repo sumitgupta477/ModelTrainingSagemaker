@@ -272,7 +272,12 @@ def test_deploy_lambda_adds_data_capture(monkeypatch):
         exceptions = type("E", (), {"ClientError": Exception})
 
         def describe_training_job(self, **_):
-            return {"ModelArtifacts": {"S3ModelArtifacts": "s3://b/model.tar.gz"}}
+            return {"TrainingJobArn": "arn:aws:sagemaker:us-east-1:1:training-job/x",
+                    "ModelArtifacts": {"S3ModelArtifacts": "s3://b/model.tar.gz"},
+                    "FinalMetricDataList": [{"MetricName": "eval:candidate_token_f1", "Value": 0.9}]}
+
+        def add_tags(self, **kw):
+            pass
 
         def create_model(self, **kw):
             calls["model"] = kw
@@ -292,6 +297,7 @@ def test_deploy_lambda_adds_data_capture(monkeypatch):
         monkeypatch.setenv(k, v)
     mod = importlib.reload(importlib.import_module("deploy_model"))
     monkeypatch.setattr(mod, "sagemaker", FakeSM())
+    monkeypatch.setattr(mod, "lambda_client", type("L", (), {"invoke": lambda self, **kw: None})())
     out = mod.lambda_handler({"detail": {"TrainingJobName": "llm-train-1", "TrainingJobStatus": "Completed"}}, None)
     assert out["action"] == "created"
     cap = calls["config"]["DataCaptureConfig"]
@@ -302,5 +308,6 @@ def test_deploy_lambda_adds_data_capture(monkeypatch):
     monkeypatch.setenv("DATA_CAPTURE_S3_URI", "")
     mod = importlib.reload(mod)
     monkeypatch.setattr(mod, "sagemaker", FakeSM())
+    monkeypatch.setattr(mod, "lambda_client", type("L", (), {"invoke": lambda self, **kw: None})())
     mod.lambda_handler({"detail": {"TrainingJobName": "llm-train-2", "TrainingJobStatus": "Completed"}}, None)
     assert "DataCaptureConfig" not in calls["config"]

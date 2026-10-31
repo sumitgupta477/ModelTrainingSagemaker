@@ -37,6 +37,24 @@ variable "training_image" {
   default     = "763104351884.dkr.ecr.us-east-1.amazonaws.com/pytorch-training:2.2.0-cpu-py310-ubuntu20.04-sagemaker"
 }
 
+variable "min_token_f1" {
+  description = "Deploy gate: minimum token F1 (0-1) on held-out data for a new model to be deployed"
+  type        = number
+  default     = 0.0
+}
+
+variable "deploy_tolerance" {
+  description = "Deploy gate: how much lower than the serving model's token F1 a new model may score and still deploy (0 = must be at least as good)"
+  type        = number
+  default     = 0.0
+}
+
+variable "deploy_without_metrics" {
+  description = "Deploy gate: deploy models whose training job recorded no evaluation metrics"
+  type        = bool
+  default     = false
+}
+
 variable "data_capture_percent" {
   description = "Percentage of endpoint requests saved to S3 for drift monitoring (1-100)"
   type        = number
