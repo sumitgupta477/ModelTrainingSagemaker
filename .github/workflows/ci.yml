@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    name: Terraform validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: SagemakerCICDCTLambda/terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Format check (warning only)
+        run: |
+          if ! terraform fmt -check -recursive -diff; then
+            echo "::warning::Some .tf files are not in canonical format. Run 'terraform fmt -recursive' to fix."
+          fi
+
+      - name: Init (no backend, no AWS credentials needed)
+        run: terraform init -backend=false -input=false
+
+      - name: Validate
+        run: terraform validate
+
+  python:
+    name: Python tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12" # same as the Lambda runtime
+
+      - name: Install test dependencies
+        run: pip install pytest boto3
+
+      - name: Compile Lambda code
+        run: python -m py_compile SagemakerCICDCTLambda/lambda/*.py SagemakerCICDCTLambda/chatlambda/*.py SagemakerCICDCTLambda/monitoring/*.py
+
+      - name: Run tests
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+        run: pytest SagemakerCICDCTLambda/tests -v
